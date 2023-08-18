@@ -1,11 +1,11 @@
 Post {
     layout: horizontal;
     padding: 1;
-    height: 4;
+    height: 5;
 }
 
-.selected {
-    background: $boost;
+Post:focus {
+    background: grey;
 }
 
 .logged #login {
@@ -13,6 +13,7 @@ Post {
 }
 
 #lemmyview {
+    layout: vertical;
     display: none;
 }
 
@@ -20,14 +21,29 @@ Post {
     display: block;
 }
 
+PostView {
+    height: 4fr;
+}
+
 RichLog {
     height: 7;
 }
 
 #search {
+    min-height: 6;
+    layout: grid;
+    grid-size: 3;
     display: none;
 }
 
 #search.searching {
     display: block;
+}
+
+#query {
+    column-span: 3;
+}
+
+.dropdown {
+    height: 100%;
 }

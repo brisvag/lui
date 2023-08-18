@@ -61,7 +61,7 @@ class LoginForm(ScrollableContainer):
 
 
 class Post(Static):
-    ...
+    focusable = True
 
 
 class PostView(ScrollableContainer):
@@ -70,25 +70,6 @@ class PostView(ScrollableContainer):
         ("down,j", "go_down", "Go down"),
     ]
 
-    idx = 0
-
-    def on_mount(self) -> None:
-        self._move_selection(0)
-
-    def _move_selection(self, amount: int) -> None:
-        posts = self.query("Post")
-        if not posts:
-            return
-        posts[self.idx].remove_class("selected")
-        self.idx = (self.idx + amount) % len(posts)
-        posts[self.idx].add_class("selected")
-
-    def action_go_up(self) -> None:
-        self._move_selection(-1)
-
-    def action_go_down(self) -> None:
-        self._move_selection(1)
-
     def add_post(self, post: dict) -> None:
         self.mount(Post(post["post"]["name"]))
 
@@ -96,7 +77,30 @@ class PostView(ScrollableContainer):
 class Search(Static):
     def compose(self) -> ComposeResult:
         yield Input(placeholder="Search...", id="query")
-        yield Select([(e.value, e.value) for e in SearchType], prompt="Type")
+        yield Select(
+            [(e.value, e.value) for e in SearchType],
+            value=SearchType.Posts,
+            allow_blank=False,
+            prompt="Type",
+            classes="dropdown",
+            id="searchtype",
+        )
+        yield Select(
+            [(e.value, e.value) for e in SortType],
+            value=SortType.Active,
+            allow_blank=False,
+            prompt="Sorting",
+            classes="dropdown",
+            id="sorttype",
+        )
+        yield Select(
+            [(e.value, e.value) for e in ListingType],
+            value=ListingType.Subscribed,
+            allow_blank=False,
+            prompt="Listing",
+            classes="dropdown",
+            id="listingtype",
+        )
 
 
 class LemmyView(Static):
@@ -113,7 +117,6 @@ class LemmyView(Static):
         yield PostView(id="posts")
 
     @on(Input.Submitted)
-    @on(Select.Changed)
     def on_search(self, event: Input.Submitted) -> None:
         self.action_search()
 
@@ -125,17 +128,18 @@ class LemmyView(Static):
 
         result = self.lemmy.search(
             q=search.query_one("#query", Input).value,
-            type_=SearchType.Posts,
-            sort=SortType.Active,
-            listing_type=ListingType.All,
+            type_=search.query_one("#searchtype", Select).value,
+            sort=search.query_one("#sorttype", Select).value,
+            listing_type=search.query_one("#listingtype", Select).value,
             limit=20,
         )
         postview = self.query_one(PostView)
         postview.remove_children()
+        search.remove_class("searching")
         for post in result["posts"]:
             postview.add_post(post)
-        search.remove_class("searching")
-        postview.focus()
+        if result["posts"]:
+            postview.query(Post)[0].focus()
 
 
 class LemmyUIApp(App):
