@@ -1,0 +1,33 @@
+Post {
+    layout: horizontal;
+    padding: 1;
+    height: 4;
+}
+
+.selected {
+    background: $boost;
+}
+
+.logged #login {
+    display: none;
+}
+
+#lemmyview {
+    display: none;
+}
+
+.logged #lemmyview {
+    display: block;
+}
+
+RichLog {
+    height: 7;
+}
+
+#search {
+    display: none;
+}
+
+#search.searching {
+    display: block;
+}
