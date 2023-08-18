@@ -1,0 +1,9 @@
+Post {
+    layout: horizontal;
+    padding: 1;
+    height: 4;
+}
+
+.selected {
+    background: $boost
+}
