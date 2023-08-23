@@ -1,20 +1,76 @@
 #!/usr/bin/env python3
 
+import asyncio
 import contextlib
+import io
 import os
+from base64 import standard_b64encode
 from typing import ClassVar
 
+import requests  # type: ignore
+from PIL import Image
 from pythorhead import Lemmy
 from pythorhead.types import ListingType, SearchType, SortType
+from rich.markup import Style
+from rich.segment import Segment
+from rich_pixels import Pixels
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import ScrollableContainer
+from textual.containers import ScrollableContainer, Vertical
 from textual.css.query import NoMatches
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, Input, Label, Select, Static
+from textual.widgets import Footer, Header, Input, Label, Markdown, Select, Static
 
 # log = RichLog()
+
+
+class KittyImage:
+    def __init__(self, url):
+        img_response = requests.get(url, stream=True)
+        img = Image.open(io.BytesIO(img_response.content))
+        self.png = io.BytesIO()
+        img.resize(size=(300, 300)).save(self.png, format="png")
+        self.buf = io.BytesIO()
+        self.write_chunked(a="T", f=100)
+        self.buf.seek(0)
+        self.segment = Segment(self.buf.read().decode(), style=Style.null())
+
+    @staticmethod
+    def serialize_gr_command(**cmd):
+        payload = cmd.pop("payload", None)
+        cmd = ",".join(f"{k}={v}" for k, v in cmd.items())
+        ans = []
+        w = ans.append
+        w(b"\033_G"), w(cmd.encode("ascii"))
+        if payload:
+            w(b";")
+            w(payload)
+        w(b"\033\\")
+        return b"".join(ans)
+
+    def write_chunked(self, **cmd):
+        self.png.seek(0)
+        data = standard_b64encode(self.png.read())
+        while data:
+            chunk, data = data[:4096], data[4096:]
+            m = 1 if data else 0
+            self.buf.write(self.serialize_gr_command(payload=chunk, m=m, **cmd))
+            self.buf.flush()
+            cmd.clear()
+
+    def __rich_console__(self, console, options):
+        yield self.segment
+
+
+class PixelImage:
+    def __init__(self, url):
+        img_response = requests.get(url, stream=True)
+        img = Image.open(io.BytesIO(img_response.content))
+        self.segment = Pixels.from_image(img.resize(size=(30, 30)))
+
+    def __rich_console__(self, console, options):
+        yield self.segment
 
 
 class LoginForm(ScrollableContainer):
@@ -62,6 +118,24 @@ class LoginForm(ScrollableContainer):
 
 class Post(Static):
     focusable = True
+    title: str = ""
+    body: str = ""
+    thumbnail = reactive(None)
+
+    def compose(self):
+        yield Static(id="thumb")
+        with Vertical():
+            yield Markdown(self.title, id="posttitle")
+            yield Markdown(self.body, name="asdasdasd", id="postbody")
+
+    def watch_thumbnail(self):
+        if self.thumbnail is not None:
+            _ = asyncio.create_task(self.update_thumbnail())
+
+    async def update_thumbnail(self):
+        # img = KittyImage(self.thumbnail)
+        img = PixelImage(self.thumbnail)
+        self.query_one("#thumb").update(img)
 
 
 class PostView(ScrollableContainer):
@@ -70,8 +144,12 @@ class PostView(ScrollableContainer):
         ("down,j", "go_down", "Go down"),
     ]
 
-    def add_post(self, post: dict) -> None:
-        self.mount(Post(post["post"]["name"]))
+    def add_post(self, post_contents: dict) -> None:
+        post = Post()
+        post.title = post_contents["post"].get("name", "")
+        post.body = post_contents["post"].get("body", "")
+        self.mount(post)
+        post.thumbnail = post_contents["post"].get("thumbnail_url", None)
 
 
 class Search(Static):
@@ -95,7 +173,7 @@ class Search(Static):
         )
         yield Select(
             [(e.value, e.value) for e in ListingType],
-            value=ListingType.Subscribed,
+            value=ListingType.All,
             allow_blank=False,
             prompt="Listing",
             classes="dropdown",
@@ -128,9 +206,9 @@ class LemmyView(Static):
 
         result = self.lemmy.search(
             q=search.query_one("#query", Input).value,
-            type_=search.query_one("#searchtype", Select).value,
-            sort=search.query_one("#sorttype", Select).value,
-            listing_type=search.query_one("#listingtype", Select).value,
+            type_=SearchType(search.query_one("#searchtype", Select).value),
+            sort=SortType(search.query_one("#sorttype", Select).value),
+            listing_type=ListingType(search.query_one("#listingtype", Select).value),
             limit=20,
         )
         postview = self.query_one(PostView)
@@ -152,6 +230,7 @@ class LemmyUIApp(App):
         Binding("up,k", "focus_previous", "Focus previous widget"),
         Binding("down,j", "focus_next", "Focus next widget"),
         Binding("ctrl+l", "log_in", "Log in"),
+        Binding("r", "refresh", "Refresh"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -181,6 +260,11 @@ class LemmyUIApp(App):
 
     def action_log_in(self) -> None:
         self.remove_class("logged")
+
+    def action_refresh(self) -> None:
+        with contextlib.suppress(NoMatches):
+            lw = self.query_one(LemmyView)
+            lw.action_search()
 
 
 if __name__ == "__main__":

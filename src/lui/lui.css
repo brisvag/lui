@@ -1,11 +1,26 @@
 Post {
     layout: horizontal;
-    padding: 1;
-    height: 5;
+    padding: 0;
+    height: 30;
 }
 
 Post:focus {
+    background: #282828;
+}
+
+Post #thumb {
+    width: 60;
+}
+
+Post #posttitle {
+    width: 1fr;
+    padding: 1;
     background: grey;
+    content-align: center middle;
+}
+
+Post #postbody {
+    width: 1fr;
 }
 
 .logged #login {
